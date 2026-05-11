@@ -1,7 +1,7 @@
 import os
 import discord
 from discord import app_commands
-import google.generativeai as genai
+import google.genai as genai
 import asyncio
 import json
 import mimetypes
@@ -25,7 +25,7 @@ Thread(target=run_web).start()
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-genai.configure(api_key=GEMINI_API_KEY)
+client_genai = genai.Client(api_key=GEMINI_API_KEY)
 
 # モデル定義
 MODELS = {
@@ -106,7 +106,7 @@ client = MyClient()
 @app_commands.describe(temperature="0.0(厳格)〜2.0(創造的)", thinking_level="Thinking Level")
 async def settings(interaction: discord.Interaction, model: str = "gemini-3-flash-preview", temperature: float = 0.7, thinking_level: str = "中"):
     settings = load_settings()
-    channel_id = str(interaction.channel_id)
+    channel_id = str(interaction.channel.id)
     settings[channel_id] = {
         "model": model,
         "temperature": max(0.0, min(2.0, temperature)),
@@ -122,7 +122,7 @@ async def settings(interaction: discord.Interaction, model: str = "gemini-3-flas
 # 履歴削除コマンド
 @client.tree.command(name="clear", description="このチャンネルの履歴を削除します")
 async def clear(interaction: discord.Interaction):
-    channel_id = str(interaction.channel_id)
+    channel_id = str(interaction.channel.id)
     history_file = get_history_file(channel_id)
     if Path(history_file).exists():
         Path(history_file).unlink()
@@ -134,7 +134,7 @@ async def clear(interaction: discord.Interaction):
 async def on_message(message):
     if message.author == client.user: return
 
-    channel_id = str(message.channel_id)
+    channel_id = str(message.channel.id)
     settings = load_settings().get(channel_id, {
         "model": "gemini-3-flash-preview",
         "temperature": 0.7,
@@ -180,31 +180,27 @@ async def on_message(message):
     conversation.append({"role": "user", "parts": content_parts if content_parts else [prompt]})
 
     # モデル設定
-    generation_config = {
-        "temperature": settings["temperature"],
-    }
-    if settings["thinking_mode"] and "thinking" in model_info["features"]:
-        generation_config["thinking_config"] = {"thinking_budget": THINKING_LEVELS[settings["thinking_level"]]}
+    config = genai.GenerateContentConfig(
+        temperature=settings["temperature"],
+        thinking_config=genai.ThinkingConfig(thinking_budget=THINKING_LEVELS[settings["thinking_level"]]) if settings["thinking_mode"] and "thinking" in model_info["features"] else None,
+    )
 
     tools = []
     if "grounding" in model_info["features"]:
-        tools.append({"google_search_retrieval": {}})
+        tools.append(genai.Tool(google_search_retrieval=genai.GoogleSearchRetrieval()))
     if "code_execution" in model_info["features"]:
-        tools.append({"code_execution": {}})
+        tools.append(genai.Tool(code_execution=genai.CodeExecution()))
     # 他のツールも追加可能
+    if tools:
+        config.tools = tools
 
-    model = genai.GenerativeModel(
-        model_name=model_name,
-        generation_config=generation_config,
-        tools=tools
-    )
-
-    chat = model.start_chat(history=conversation[:-1])  # 履歴を渡す
+    # チャット作成
+    chat = client_genai.chats.create(model=model_name, config=config, history=conversation[:-1])
 
     async with message.channel.typing():
         try:
             # ストリーミングで送信
-            response = await asyncio.to_thread(chat.send_message, conversation[-1]["parts"], stream=True)
+            response = chat.send_message(message=conversation[-1]["parts"], stream=True)
             
             full_response = ""
             thinking_message = None
@@ -213,14 +209,14 @@ async def on_message(message):
             async for chunk in response:
                 if chunk.candidates:
                     for candidate in chunk.candidates:
-                        if hasattr(candidate, 'content') and candidate.content.parts:
+                        if candidate.content and candidate.content.parts:
                             for part in candidate.content.parts:
-                                if hasattr(part, 'text') and part.text:
+                                if part.text:
                                     full_response += part.text
-                                elif hasattr(part, 'function_call'):
+                                elif part.function_call:
                                     # 関数呼び出し処理
                                     pass
-                                elif hasattr(part, 'thought') and settings["thinking_mode"]:
+                                elif part.thought and settings["thinking_mode"]:
                                     # Thinking Modeのリアルタイム表示
                                     thinking_count += 1
                                     if thinking_message is None:
