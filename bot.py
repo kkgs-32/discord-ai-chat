@@ -217,7 +217,7 @@ async def on_message(message):
             thinking_message = None
             thinking_count = 0
             
-            async for chunk in response_stream:
+            for chunk in response_stream:
                 if chunk.text:
                     full_response += chunk.text
                 # Thinkingの処理（chunkにthoughtがあれば）
