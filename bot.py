@@ -184,13 +184,19 @@ async def on_message(message):
     # 履歴読み込み
     history = load_history(channel_id)
 
-    # 履歴をGemini形式に変換（最新3件のみ使用してトークン節約）
+    # 履歴をGemini形式に変換（最新10件のみ使用してトークン節約）
     gemini_history = []
-    for h in history[-10:]:  # 最新3件のみ
-        gemini_history.append(types.Content(role="user", parts=[h["user"]]))
-        gemini_history.append(types.Content(role="model", parts=[h["bot"]]))
+    for h in history[-10:]:  # 最新10件のみ
+        gemini_history.append(types.Content(role="user", parts=[types.Part(text=h["user"])]))
+        gemini_history.append(types.Content(role="model", parts=[types.Part(text=h["bot"])]))
 
-    user_parts = content_parts if content_parts else [prompt]
+    # user_partsの作成
+    if content_parts:
+        user_parts = [types.Part(inline_data=types.Blob(mime_type=part["mime_type"], data=part["data"])) for part in content_parts]
+        if prompt:
+            user_parts.insert(0, types.Part(text=prompt))
+    else:
+        user_parts = [types.Part(text=prompt)]
 
     # モデル設定
     config = types.GenerateContentConfig(
