@@ -119,7 +119,7 @@ async def settings(interaction: discord.Interaction, model: str = "gemini-3-flas
         "model": model,
         "temperature": max(0.0, min(2.0, temperature)),
         "thinking_level": thinking_level,
-        "thinking_mode": True  # デフォルトオン、必要に応じて変更
+        "thinking_mode": False  # デフォルトオフ（トークン節約）
     }
     save_settings(settings)
     await interaction.response.send_message(
@@ -132,9 +132,11 @@ async def settings(interaction: discord.Interaction, model: str = "gemini-3-flas
 async def clear(interaction: discord.Interaction):
     channel_id = str(interaction.channel.id)
     history_file = get_history_file(channel_id)
+    deleted = False
     if Path(history_file).exists():
         Path(history_file).unlink()
-    await interaction.response.send_message("履歴を削除したよ！", ephemeral=True)
+        deleted = True
+    await interaction.response.send_message(f"履歴を削除したよ！{'削除' if deleted else '履歴がありませんでした'}。", ephemeral=True)
 
 # --- 4. メッセージ受信処理 ---
 
@@ -147,7 +149,7 @@ async def on_message(message):
         "model": "gemini-3-flash-preview",
         "temperature": 0.7,
         "thinking_level": "中",
-        "thinking_mode": True
+        "thinking_mode": False
     })
 
     model_name = settings["model"]
@@ -182,9 +184,9 @@ async def on_message(message):
     # 履歴読み込み
     history = load_history(channel_id)
 
-    # 履歴をGemini形式に変換
+    # 履歴をGemini形式に変換（最新3件のみ使用してトークン節約）
     gemini_history = []
-    for h in history[-10:]:  # 最新10件
+    for h in history[-10:]:  # 最新3件のみ
         gemini_history.append(types.Content(role="user", parts=[h["user"]]))
         gemini_history.append(types.Content(role="model", parts=[h["bot"]]))
 
