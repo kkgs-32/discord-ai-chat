@@ -172,18 +172,21 @@ async def on_message(message):
     if unsupported_files:
         prompt += f"\n\n非対応ファイル: {', '.join(unsupported_files)} は対応していません。"
 
-    # 履歴をGemini形式に変換
-    conversation = []
-    for h in history[-10:]:  # 最新10件
-        conversation.append({"role": "user", "parts": [h["user"]]})
-        conversation.append({"role": "model", "parts": [h["bot"]]})
+    # 履歴読み込み
+    history = load_history(channel_id)
 
-    conversation.append({"role": "user", "parts": content_parts if content_parts else [prompt]})
+    # 履歴をGemini形式に変換
+    gemini_history = []
+    for h in history[-10:]:  # 最新10件
+        gemini_history.append(types.Content(role="user", parts=[h["user"]]))
+        gemini_history.append(types.Content(role="model", parts=[h["bot"]]))
+
+    user_parts = content_parts if content_parts else [prompt]
 
     # モデル設定
     config = types.GenerateContentConfig(
         temperature=settings["temperature"],
-        thinking_config=types.ThinkingConfig(include_thoughts=True, budget_tokens=1024) if settings["thinking_mode"] and "thinking" in model_info["features"] else None,
+        thinking_config=types.ThinkingConfig(include_thoughts=True, thinking_level=THINKING_LEVELS[settings["thinking_level"]]) if settings["thinking_mode"] and "thinking" in model_info["features"] else None,
     )
 
     tools = []
@@ -196,12 +199,12 @@ async def on_message(message):
         config.tools = tools
 
     # チャット作成
-    chat = client_genai.chats.create(model=model_name, config=config, history=conversation[:-1])
+    chat = client_genai.chats.create(model=model_name, config=config, history=gemini_history)
 
     async with message.channel.typing():
         try:
             # ストリーミングで送信
-            response_stream = chat.send_message_stream(message=conversation[-1]["parts"])
+            response_stream = chat.send_message_stream(message=user_parts)
             
             full_response = ""
             thinking_message = None
