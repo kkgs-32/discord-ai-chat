@@ -27,6 +27,10 @@ Thread(target=run_web).start()
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
+if not DISCORD_TOKEN or not GEMINI_API_KEY:
+    print("Environment variables DISCORD_TOKEN and GEMINI_API_KEY must be set")
+    exit(1)
+
 client_genai = genai.Client(api_key=GEMINI_API_KEY)
 
 # モデル定義
