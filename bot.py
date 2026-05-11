@@ -191,9 +191,9 @@ async def on_message(message):
 
     tools = []
     if "grounding" in model_info["features"]:
-        tools.append(types.Tool(google_search_retrieval=types.GoogleSearchRetrieval()))
+        tools.append(types.GoogleSearchRetrievalTool())
     if "code_execution" in model_info["features"]:
-        tools.append(types.Tool(code_execution=types.CodeExecution()))
+        tools.append(types.CodeExecutionTool())
     # 他のツールも追加可能
     if tools:
         config.tools = tools
