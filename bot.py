@@ -2,6 +2,7 @@ import os
 import discord
 from discord import app_commands
 import google.genai as genai
+from google.genai import types
 import asyncio
 import json
 import mimetypes
@@ -180,16 +181,16 @@ async def on_message(message):
     conversation.append({"role": "user", "parts": content_parts if content_parts else [prompt]})
 
     # モデル設定
-    config = genai.GenerateContentConfig(
+    config = types.GenerateContentConfig(
         temperature=settings["temperature"],
-        thinking_config=genai.ThinkingConfig(thinking_budget=THINKING_LEVELS[settings["thinking_level"]]) if settings["thinking_mode"] and "thinking" in model_info["features"] else None,
+        thinking_config=types.ThinkingConfig(include_thoughts=True, budget_tokens=1024) if settings["thinking_mode"] and "thinking" in model_info["features"] else None,
     )
 
     tools = []
     if "grounding" in model_info["features"]:
-        tools.append(genai.Tool(google_search_retrieval=genai.GoogleSearchRetrieval()))
+        tools.append(types.Tool(google_search_retrieval=types.GoogleSearchRetrieval()))
     if "code_execution" in model_info["features"]:
-        tools.append(genai.Tool(code_execution=genai.CodeExecution()))
+        tools.append(types.Tool(code_execution=types.CodeExecution()))
     # 他のツールも追加可能
     if tools:
         config.tools = tools
@@ -200,30 +201,23 @@ async def on_message(message):
     async with message.channel.typing():
         try:
             # ストリーミングで送信
-            response = chat.send_message(message=conversation[-1]["parts"], stream=True)
+            response_stream = chat.send_message_stream(message=conversation[-1]["parts"])
             
             full_response = ""
             thinking_message = None
             thinking_count = 0
             
-            async for chunk in response:
-                if chunk.candidates:
-                    for candidate in chunk.candidates:
-                        if candidate.content and candidate.content.parts:
-                            for part in candidate.content.parts:
-                                if part.text:
-                                    full_response += part.text
-                                elif part.function_call:
-                                    # 関数呼び出し処理
-                                    pass
-                                elif part.thought and settings["thinking_mode"]:
-                                    # Thinking Modeのリアルタイム表示
-                                    thinking_count += 1
-                                    if thinking_message is None:
-                                        thinking_message = await message.channel.send(f"思考中... {thinking_count}s")
-                                    else:
-                                        await thinking_message.edit(content=f"思考中... {thinking_count}s")
-                                    await asyncio.sleep(1)  # 1秒待つ
+            async for chunk in response_stream:
+                if chunk.text:
+                    full_response += chunk.text
+                # Thinkingの処理（chunkにthoughtがあれば）
+                if hasattr(chunk, 'thought') and chunk.thought and settings["thinking_mode"]:
+                    thinking_count += 1
+                    if thinking_message is None:
+                        thinking_message = await message.channel.send(f"思考中... {thinking_count}s")
+                    else:
+                        await thinking_message.edit(content=f"思考中... {thinking_count}s")
+                    await asyncio.sleep(1)
             
             # Thinkingメッセージ削除
             if thinking_message:
