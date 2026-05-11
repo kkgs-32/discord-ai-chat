@@ -3,7 +3,7 @@ import discord
 from discord import app_commands
 import google.genai as genai
 from google.genai import types
-from google.genai.types import GoogleSearchRetrievalTool, CodeExecutionTool
+from google.genai.types import GoogleSearchRetrieval, ToolCodeExecution
 import asyncio
 import json
 import mimetypes
@@ -198,9 +198,9 @@ async def on_message(message):
 
     tools = []
     if "grounding" in model_info["features"]:
-        tools.append(GoogleSearchRetrievalTool())
+        tools.append(GoogleSearchRetrieval())
     if "code_execution" in model_info["features"]:
-        tools.append(CodeExecutionTool())
+        tools.append(ToolCodeExecution())
     # 他のツールも追加可能
     if tools:
         config.tools = tools
