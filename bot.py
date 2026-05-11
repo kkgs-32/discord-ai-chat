@@ -28,6 +28,8 @@ DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 if not DISCORD_TOKEN or not GEMINI_API_KEY:
+    print(f"DISCORD_TOKEN set: {bool(DISCORD_TOKEN)}")
+    print(f"GEMINI_API_KEY set: {bool(GEMINI_API_KEY)}")
     print("Environment variables DISCORD_TOKEN and GEMINI_API_KEY must be set")
     exit(1)
 
