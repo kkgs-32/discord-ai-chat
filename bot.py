@@ -247,10 +247,10 @@ async def on_message(message):
     )
 
     tools = []
-    if "grounding" in model_info["features"]:
-        tools.append(Tool(google_search=types.GoogleSearch()))
-    if tools:
-        config.tools = tools
+    # if "grounding" in model_info["features"]:
+    #     tools.append(Tool(google_search=types.GoogleSearch()))
+    # if tools:
+    #     config.tools = tools
 
     # チャット作成
     chat = client_genai.chats.create(model=model_name, config=config, history=gemini_history)
