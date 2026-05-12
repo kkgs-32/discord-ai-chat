@@ -8,6 +8,19 @@ import asyncio
 import json
 import mimetypes
 from pathlib import Path
+import logging
+from datetime import datetime
+
+# --- 0. ログ設定 ---
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('api_log.txt', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # --- 1. Render用ダミーサーバー ---
 from flask import Flask
@@ -218,6 +231,18 @@ async def on_message(message):
 
     async with message.channel.typing():
         try:
+            # リクエストログ
+            logger.info(f"=== API Request ===")
+            logger.info(f"Channel ID: {channel_id}")
+            logger.info(f"Model: {model_name}")
+            logger.info(f"Temperature: {settings['temperature']}")
+            logger.info(f"Thinking Mode: {settings['thinking_mode']}")
+            logger.info(f"User Message: {prompt[:200]}...")  # 最初の200文字のみ
+            logger.info(f"Content Parts Count: {len(content_parts)}")
+            if content_parts:
+                for i, part in enumerate(content_parts):
+                    logger.info(f"  Part {i}: mime_type={part['mime_type']}, size={len(part['data'])} bytes")
+            
             # ストリーミングで送信
             response_stream = chat.send_message_stream(message=user_parts)
             
@@ -237,6 +262,13 @@ async def on_message(message):
                         await thinking_message.edit(content=f"思考中... {thinking_count}s")
                     await asyncio.sleep(1)
             
+            # レスポンスログ
+            logger.info(f"=== API Response ===")
+            logger.info(f"Status: Success")
+            logger.info(f"Response Length: {len(full_response)} characters")
+            logger.info(f"Response Preview: {full_response[:200]}...")  # 最初の200文字のみ
+            logger.info(f"Thinking Count: {thinking_count}")
+            
             # Thinkingメッセージ削除
             if thinking_message:
                 await thinking_message.delete()
@@ -248,6 +280,13 @@ async def on_message(message):
             history.append({"user": prompt, "bot": full_response})
             save_history(channel_id, history)
         except Exception as e:
+            logger.error(f"=== API Error ===")
+            logger.error(f"Error Type: {type(e).__name__}")
+            logger.error(f"Error Message: {str(e)}")
+            logger.error(f"Channel ID: {channel_id}")
+            logger.error(f"Model: {model_name}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             await message.channel.send(f"エラー: {e}")
 
 client.run(DISCORD_TOKEN)
