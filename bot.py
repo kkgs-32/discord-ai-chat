@@ -3,7 +3,7 @@ import discord
 from discord import app_commands
 import google.genai as genai
 from google.genai import types
-from google.genai.types import ToolCodeExecution, Tool
+from google.genai.types import Tool
 import asyncio
 import json
 import mimetypes
@@ -143,13 +143,42 @@ async def settings(interaction: discord.Interaction, model: str = "gemini-3-flas
 # 履歴削除コマンド
 @client.tree.command(name="clear", description="このチャンネルの履歴を削除します")
 async def clear(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+
     channel_id = str(interaction.channel.id)
     history_file = get_history_file(channel_id)
     deleted = False
     if Path(history_file).exists():
         Path(history_file).unlink()
         deleted = True
-    await interaction.response.send_message(f"履歴を削除したよ！{'削除' if deleted else '履歴がありませんでした'}。", ephemeral=True)
+
+    purge_result = 0
+    purge_error = None
+    if hasattr(interaction.channel, 'purge'):
+        try:
+            def check(message):
+                return message.author == client.user or message.author == interaction.user
+
+            deleted_messages = await interaction.channel.purge(limit=1000, check=check)
+            purge_result = len(deleted_messages)
+        except discord.Forbidden:
+            purge_error = '権限がありません。メッセージは削除できませんでした。'
+        except Exception as e:
+            purge_error = f'メッセージ削除中にエラーが発生しました: {e}'
+            logger.error(f"clear command purge error: {e}")
+    else:
+        purge_error = 'このチャンネルでメッセージ削除がサポートされていません。'
+
+    if purge_error:
+        await interaction.followup.send(
+            f"履歴ファイルを{'削除しました' if deleted else '見つけませんでした'}。{purge_error}",
+            ephemeral=True
+        )
+    else:
+        await interaction.followup.send(
+            f"履歴ファイルを{'削除しました' if deleted else '見つけませんでした'}。チャットメッセージを {purge_result} 件削除しました。",
+            ephemeral=True
+        )
 
 # --- 4. メッセージ受信処理 ---
 
@@ -217,13 +246,9 @@ async def on_message(message):
         thinking_config=types.ThinkingConfig(include_thoughts=True, thinking_level=THINKING_LEVELS[settings["thinking_level"]]) if settings["thinking_mode"] and "thinking" in model_info["features"] else None,
     )
 
-    # ツール無効化（クォータ節約のため）
-    # 注：グラウンディングとコード実行は追加のAPI呼び出しを発生させるため、デフォルト無効
     tools = []
-    # if "grounding" in model_info["features"]:
-    #     tools.append(Tool(google_search=types.GoogleSearch()))
-    # if "code_execution" in model_info["features"]:
-    #     tools.append(Tool(code_execution=ToolCodeExecution()))
+    if "grounding" in model_info["features"]:
+        tools.append(Tool(google_search=types.GoogleSearch()))
     if tools:
         config.tools = tools
 
