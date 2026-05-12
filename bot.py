@@ -217,12 +217,13 @@ async def on_message(message):
         thinking_config=types.ThinkingConfig(include_thoughts=True, thinking_level=THINKING_LEVELS[settings["thinking_level"]]) if settings["thinking_mode"] and "thinking" in model_info["features"] else None,
     )
 
+    # ツール無効化（クォータ節約のため）
+    # 注：グラウンディングとコード実行は追加のAPI呼び出しを発生させるため、デフォルト無効
     tools = []
-    if "grounding" in model_info["features"]:
-        tools.append(Tool(google_search=types.GoogleSearch()))
-    if "code_execution" in model_info["features"]:
-        tools.append(Tool(code_execution=ToolCodeExecution()))
-    # 他のツールも追加可能
+    # if "grounding" in model_info["features"]:
+    #     tools.append(Tool(google_search=types.GoogleSearch()))
+    # if "code_execution" in model_info["features"]:
+    #     tools.append(Tool(code_execution=ToolCodeExecution()))
     if tools:
         config.tools = tools
 
